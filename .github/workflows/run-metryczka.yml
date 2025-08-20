@@ -1,88 +1,90 @@
-name: Run Metryczka (z polami q1–q10)
+name: Run Metryczka (krok po kroku)
 
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "Skąd wziąć PDF?"
-        type: choice
-        options: [repo, url]
-        default: repo
-        required: true
       pdf_path:
-        description: "Ścieżka do PDF w repo (np. metryczka_in/plik.pdf)"
+        description: "Ścieżka do PDF w repo (np. Braterstwo-...pdf albo folder/plik.pdf)"
+        required: true
+        type: string
+      q1:  { description: "Odpowiedź 1",  required: false, type: string }
+      q2:  { description: "Odpowiedź 2",  required: false, type: string }
+      q3:  { description: "Odpowiedź 3",  required: false, type: string }
+      q4:  { description: "Odpowiedź 4",  required: false, type: string }
+      q5:  { description: "Odpowiedź 5",  required: false, type: string }
+      q6:  { description: "Odpowiedź 6",  required: false, type: string }
+      q7:  { description: "Odpowiedź 7",  required: false, type: string }
+      q8:  { description: "Odpowiedź 8",  required: false, type: string }
+      q9:
+        description: "Odpowiedź 9 **i kolejne** (może mieć wiele linii; każda linia = następna odpowiedź)"
         required: false
         type: string
-      pdf_url:
-        description: "URL do PDF (gdy mode=url)"
-        required: false
-        type: string
-      q1:  { description: "Odpowiedź 1", required: false, type: string }
-      q2:  { description: "Odpowiedź 2", required: false, type: string }
-      q3:  { description: "Odpowiedź 3", required: false, type: string }
-      q4:  { description: "Odpowiedź 4", required: false, type: string }
-      q5:  { description: "Odpowiedź 5", required: false, type: string }
-      q6:  { description: "Odpowiedź 6", required: false, type: string }
-      q7:  { description: "Odpowiedź 7", required: false, type: string }
-      q8:  { description: "Odpowiedź 8", required: false, type: string }
-      q9:  { description: "Odpowiedź 9", required: false, type: string }
-      q10: { description: "Odpowiedź 10", required: false, type: string }
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    permissions: { contents: read }
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install dependencies
+        shell: bash
         run: |
+          set -e
           python -m venv venv
           . venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Resolve PDF (repo/url)
+      - name: Validate PDF path
+        shell: bash
         run: |
-          if [ "${{ inputs.mode }}" = "url" ]; then
-            mkdir -p input
-            curl -L "${{ inputs.pdf_url }}" -o "input/source.pdf"
-            echo "PDF_PATH=input/source.pdf" >> $GITHUB_ENV
-          else
-            test -n "${{ inputs.pdf_path }}" || (echo "Podaj pdf_path" && exit 1)
-            test -f "${{ inputs.pdf_path }}" || (echo "Nie ma pliku: ${{ inputs.pdf_path }}" && exit 1)
-            echo "PDF_PATH=${{ inputs.pdf_path }}" >> $GITHUB_ENV
-          fi
+          set -e
+          test -f "${{ inputs.pdf_path }}" || { echo "Nie ma pliku: ${{ inputs.pdf_path }}"; exit 1; }
+          echo "PDF_PATH=${{ inputs.pdf_path }}" >> $GITHUB_ENV
 
       - name: Build answers stream
+        shell: bash
         run: |
-          : > answers.txt
-          echo "${{ inputs.q1 }}"  >> answers.txt
-          echo "${{ inputs.q2 }}"  >> answers.txt
-          echo "${{ inputs.q3 }}"  >> answers.txt
-          echo "${{ inputs.q4 }}"  >> answers.txt
-          echo "${{ inputs.q5 }}"  >> answers.txt
-          echo "${{ inputs.q6 }}"  >> answers.txt
-          echo "${{ inputs.q7 }}"  >> answers.txt
-          echo "${{ inputs.q8 }}"  >> answers.txt
-          echo "${{ inputs.q9 }}"  >> answers.txt
-          echo "${{ inputs.q10 }}" >> answers.txt
-          nl -ba answers.txt
+          set -e
+          {
+            printf "%s\n" "${{ inputs.q1 }}"
+            printf "%s\n" "${{ inputs.q2 }}"
+            printf "%s\n" "${{ inputs.q3 }}"
+            printf "%s\n" "${{ inputs.q4 }}"
+            printf "%s\n" "${{ inputs.q5 }}"
+            printf "%s\n" "${{ inputs.q6 }}"
+            printf "%s\n" "${{ inputs.q7 }}"
+            printf "%s\n" "${{ inputs.q8 }}"
+            # q9 może zawierać wiele linii – zachowujemy je 1:1
+            printf "%s\n" "${{ inputs.q9 }}"
+          } > answers.txt
+          echo "=== Answers preview ==="
+          nl -ba answers.txt || true
 
       - name: Run metryczka (CLI)
         shell: bash
         run: |
+          set -e
           . venv/bin/activate
           python metryczka_cli.py --pdf "$PDF_PATH" < answers.txt
 
       - name: Collect outputs
+        shell: bash
         run: |
+          set -e
           mkdir -p out
           shopt -s globstar nullglob
           for f in **/*.pdf; do
-            if [ "$f" != "$PDF_PATH" ]; then cp "$f" "out/$(basename "$f")"; fi
+            [[ "$f" == "$PDF_PATH" ]] && continue
+            cp "$f" "out/$(basename "$f")"
           done
           ls -la out || true
 
@@ -92,3 +94,4 @@ jobs:
         with:
           name: metryczka-output
           path: out/*
+          if-no-files-found: warn
