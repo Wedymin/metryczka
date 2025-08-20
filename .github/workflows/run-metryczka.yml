@@ -17,16 +17,16 @@ on:
         description: "URL do PDF (gdy mode=url)"
         required: false
         type: string
-      q1:  { description: "Odpowiedź 1", required: false, type: string }
-      q2:  { description: "Odpowiedź 2", required: false, type: string }
-      q3:  { description: "Odpowiedź 3", required: false, type: string }
-      q4:  { description: "Odpowiedź 4", required: false, type: string }
-      q5:  { description: "Odpowiedź 5", required: false, type: string }
-      q6:  { description: "Odpowiedź 6", required: false, type: string }
-      q7:  { description: "Odpowiedź 7", required: false, type: string }
-      q8:  { description: "Odpowiedź 8", required: false, type: string }
-      q9:  { description: "Odpowiedź 9", required: false, type: string }
-      q10: { description: "Odpowiedź 10", required: false, type: string }
+      q1: { description: "Odpowiedź 1 (np. numer opcji)", required: false, type: string }
+      q2: { description: "Odpowiedź 2", required: false, type: string }
+      q3: { description: "Odpowiedź 3", required: false, type: string }
+      q4: { description: "Odpowiedź 4", required: false, type: string }
+      q5: { description: "Odpowiedź 5", required: false, type: string }
+      q6: { description: "Odpowiedź 6", required: false, type: string }
+      q7: { description: "Odpowiedź 7", required: false, type: string }
+      q8: { description: "Odpowiedź 8", required: false, type: string }
+      q9: { description: "Odpowiedź 9", required: false, type: string }
+      q10:{ description: "Odpowiedź 10", required: false, type: string }
 
 jobs:
   run:
@@ -36,14 +36,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
-
       - name: Install dependencies
         run: |
           python -m venv venv
           . venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
       - name: Resolve PDF (repo/url)
         run: |
           if [ "${{ inputs.mode }}" = "url" ]; then
@@ -52,4 +50,39 @@ jobs:
             echo "PDF_PATH=input/source.pdf" >> $GITHUB_ENV
           else
             test -n "${{ inputs.pdf_path }}" || (echo "Podaj pdf_path" && exit 1)
-            test -f "${{ inp
+            test -f "${{ inputs.pdf_path }}" || (echo "Nie ma pliku: ${{ inputs.pdf_path }}" && exit 1)
+            echo "PDF_PATH=${{ inputs.pdf_path }}" >> $GITHUB_ENV
+          fi
+      - name: Build answers stream
+        run: |
+          : > answers.txt
+          echo "${{ inputs.q1 }}"  >> answers.txt
+          echo "${{ inputs.q2 }}"  >> answers.txt
+          echo "${{ inputs.q3 }}"  >> answers.txt
+          echo "${{ inputs.q4 }}"  >> answers.txt
+          echo "${{ inputs.q5 }}"  >> answers.txt
+          echo "${{ inputs.q6 }}"  >> answers.txt
+          echo "${{ inputs.q7 }}"  >> answers.txt
+          echo "${{ inputs.q8 }}"  >> answers.txt
+          echo "${{ inputs.q9 }}"  >> answers.txt
+          echo "${{ inputs.q10 }}" >> answers.txt
+          nl -ba answers.txt
+      - name: Run metryczka (CLI)
+        shell: bash
+        run: |
+          . venv/bin/activate
+          python metryczka_cli.py --pdf "$PDF_PATH" < answers.txt
+      - name: Collect outputs
+        run: |
+          mkdir -p out
+          shopt -s globstar nullglob
+          for f in **/*.pdf; do
+            if [ "$f" != "$PDF_PATH" ]; then cp "$f" "out/$(basename "$f")"; fi
+          done
+          ls -la out || true
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metryczka-output
+          path: out/*
