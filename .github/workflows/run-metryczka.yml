@@ -1,1 +1,101 @@
+name: Run Metryczka
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Skąd wziąć PDF?"
+        type: choice
+        options: [repo, url]
+        default: repo
+        required: true
+      pdf_path:
+        description: "Ścieżka do PDF w repo (np. input/plik.pdf) — używane, gdy mode=repo"
+        required: false
+        type: string
+      pdf_url:
+        description: "Adres URL do PDF (np. z Issue/komentarza) — używane, gdy mode=url"
+        required: false
+        type: string
+      answers:
+        description: |
+          (Opcjonalnie) Odpowiedzi do CLI, każda w nowej linii — dokładnie to,
+          co wpisujesz w terminalu przy pytaniach programu.
+        required: false
+        type: string
+      artifact_name:
+        description: "Nazwa artefaktu z wynikami"
+        required: false
+        default: metryczka-output
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Wejście 1: PDF z URL
+      - name: Fetch PDF from URL
+        if: ${{ inputs.mode == 'url' }}
+        run: |
+          mkdir -p input
+          curl -L "${{ inputs.pdf_url }}" -o "input/source.pdf"
+          echo "PDF_PATH=input/source.pdf" >> $GITHUB_ENV
+
+      # Wejście 2: PDF z repo
+      - name: Use PDF from repo
+        if: ${{ inputs.mode == 'repo' }}
+        run: |
+          if [ -z "${{ inputs.pdf_path }}" ]; then
+            echo "Brak inputs.pdf_path (np. input/plik.pdf) dla mode=repo" && exit 1
+          fi
+          test -f "${{ inputs.pdf_path }}" || (echo "Nie znaleziono pliku: ${{ inputs.pdf_path }}" && exit 1)
+          echo "PDF_PATH=${{ inputs.pdf_path }}" >> $GITHUB_ENV
+
+      - name: Run metryczka (CLI)
+        shell: bash
+        run: |
+          . venv/bin/activate
+          if [ -n "${{ inputs.answers }}" ]; then
+            # podajemy odpowiedzi do CLI (każda w nowej linii)
+            printf "%s\n" "${{ inputs.answers }}" | python metryczka_cli.py --pdf "$PDF_PATH"
+          else
+            # jeżeli nie podano answers, wysyłamy puste wiersze (Enter)
+            yes "" | python metryczka_cli.py --pdf "$PDF_PATH"
+          fi
+
+      - name: Collect outputs
+        run: |
+          mkdir -p out
+          shopt -s globstar nullglob
+          for f in **/*.pdf; do
+            # kopiujemy wszystkie PDF-y poza źródłowym wejściem
+            if [ "$f" != "$PDF_PATH" ]; then
+              cp "$f" "out/$(basename "$f")"
+            fi
+          done
+          ls -la out || true
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: out/*
 
