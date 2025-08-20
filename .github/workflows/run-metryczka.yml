@@ -50,10 +50,20 @@ jobs:
           test -f "${{ inputs.pdf_path }}" || { echo "Nie ma pliku: ${{ inputs.pdf_path }}"; exit 1; }
           echo "PDF_PATH=${{ inputs.pdf_path }}" >> $GITHUB_ENV
 
-      - name: Build answers stream
+            - name: Build answers stream
         shell: bash
         run: |
           set -e
+          # q9 może być listą odpowiedzi rozdzielonych | ; , albo zawierać sekwencje \n
+          q9_raw="${{ inputs.q9 }}"
+          q9="$q9_raw"
+          # zamień dosłowne "\n" na prawdziwe nowe linie
+          q9="${q9//\\n/$'\n'}"
+          # obsłuż separatory | ; ,
+          q9="${q9//|/$'\n'}"
+          q9="${q9//;/$'\n'}"
+          q9="${q9//,/$'\n'}"
+
           {
             printf "%s\n" "${{ inputs.q1 }}"
             printf "%s\n" "${{ inputs.q2 }}"
@@ -63,11 +73,13 @@ jobs:
             printf "%s\n" "${{ inputs.q6 }}"
             printf "%s\n" "${{ inputs.q7 }}"
             printf "%s\n" "${{ inputs.q8 }}"
-            # q9 może zawierać wiele linii – zachowujemy je 1:1
-            printf "%s\n" "${{ inputs.q9 }}"
+            printf "%s\n" "$q9"
+            # bezpieczeństwo: dolej 12 pustych linii, gdyby CLI zapytało o coś jeszcze
+            for i in {1..12}; do printf "\n"; done
           } > answers.txt
-          echo "=== Answers preview ==="
-          nl -ba answers.txt || true
+
+          echo "=== Answers preview (pierwsze 40 linii) ==="
+          nl -ba answers.txt | sed -n '1,40p'
 
       - name: Run metryczka (CLI)
         shell: bash
