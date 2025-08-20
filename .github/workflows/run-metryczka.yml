@@ -50,7 +50,7 @@ jobs:
           test -f "${{ inputs.pdf_path }}" || { echo "Nie ma pliku: ${{ inputs.pdf_path }}"; exit 1; }
           echo "PDF_PATH=${{ inputs.pdf_path }}" >> $GITHUB_ENV
 
-            - name: Build answers stream
+      - name: Build answers stream
         shell: bash
         run: |
           set -e
