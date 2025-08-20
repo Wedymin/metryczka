@@ -17,16 +17,16 @@ on:
         description: "URL do PDF (gdy mode=url)"
         required: false
         type: string
-      q1: { description: "Odpowiedź 1 (np. numer opcji)", required: false, type: string }
-      q2: { description: "Odpowiedź 2", required: false, type: string }
-      q3: { description: "Odpowiedź 3", required: false, type: string }
-      q4: { description: "Odpowiedź 4", required: false, type: string }
-      q5: { description: "Odpowiedź 5", required: false, type: string }
-      q6: { description: "Odpowiedź 6", required: false, type: string }
-      q7: { description: "Odpowiedź 7", required: false, type: string }
-      q8: { description: "Odpowiedź 8", required: false, type: string }
-      q9: { description: "Odpowiedź 9", required: false, type: string }
-      q10:{ description: "Odpowiedź 10", required: false, type: string }
+      q1:  { description: "Odpowiedź 1", required: false, type: string }
+      q2:  { description: "Odpowiedź 2", required: false, type: string }
+      q3:  { description: "Odpowiedź 3", required: false, type: string }
+      q4:  { description: "Odpowiedź 4", required: false, type: string }
+      q5:  { description: "Odpowiedź 5", required: false, type: string }
+      q6:  { description: "Odpowiedź 6", required: false, type: string }
+      q7:  { description: "Odpowiedź 7", required: false, type: string }
+      q8:  { description: "Odpowiedź 8", required: false, type: string }
+      q9:  { description: "Odpowiedź 9", required: false, type: string }
+      q10: { description: "Odpowiedź 10", required: false, type: string }
 
 jobs:
   run:
