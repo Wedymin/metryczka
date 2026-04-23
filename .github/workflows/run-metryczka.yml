@@ -43,6 +43,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Ghostscript
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y ghostscript
+
       - name: Validate PDF path
         shell: bash
         run: |
@@ -100,10 +107,38 @@ jobs:
           done
           ls -la out || true
 
+      - name: Downgrade output PDFs
+        shell: bash
+        run: |
+          set -e
+          mkdir -p downgraded
+          shopt -s nullglob
+          found=0
+          for f in out/*.pdf; do
+            found=1
+            base="$(basename "$f")"
+            gs \
+              -sDEVICE=pdfwrite \
+              -dCompatibilityLevel=1.4 \
+              -dPDFSETTINGS=/prepress \
+              -dNOPAUSE \
+              -dQUIET \
+              -dBATCH \
+              -sOutputFile="downgraded/$base" \
+              "$f"
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "Nie znaleziono PDF-ów w out/"
+            exit 1
+          fi
+
+          ls -la downgraded || true
+
       - name: Upload artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: metryczka-output
-          path: out/*
+          path: downgraded/*
           if-no-files-found: warn
