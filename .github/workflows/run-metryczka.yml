@@ -1,0 +1,159 @@
+name: Run Metryczka
+
+on:
+  workflow_dispatch:
+    inputs:
+      pdf_path:
+        description: "Ścieżka do PDF w repo"
+        required: true
+        type: string
+
+      competitions:
+        description: "Konkurencje, np. Pcz25m10z13:w,Ksp25m10:k,Pm25m10:w"
+        required: true
+        type: string
+
+      dopuszczenie:
+        description: "Dodać DOP. na pierwszej wybranej metryczce?"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          set -e
+          python -m venv venv
+          . venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Ghostscript
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y ghostscript
+
+      - name: Validate PDF
+        shell: bash
+        env:
+          INPUT_PDF: ${{ inputs.pdf_path }}
+        run: |
+          set -e
+
+          if [ ! -f "$INPUT_PDF" ]; then
+            echo "Nie znaleziono pliku:"
+            echo "$INPUT_PDF"
+            exit 1
+          fi
+
+          echo "PDF wejściowy:"
+          echo "$INPUT_PDF"
+
+      - name: Prepare filenames
+        shell: bash
+        env:
+          INPUT_PDF: ${{ inputs.pdf_path }}
+        run: |
+          set -e
+
+          mkdir -p generated
+          mkdir -p final
+
+          BASE="$(basename "$INPUT_PDF")"
+          STEM="${BASE%.*}"
+
+          RAW_PDF="generated/${STEM}-STAMP.pdf"
+          FINAL_PDF="final/${STEM}-STAMP.pdf"
+
+          echo "PDF_PATH=$INPUT_PDF" >> "$GITHUB_ENV"
+          echo "RAW_PDF=$RAW_PDF" >> "$GITHUB_ENV"
+          echo "FINAL_PDF=$FINAL_PDF" >> "$GITHUB_ENV"
+
+          echo "Plik roboczy:"
+          echo "$RAW_PDF"
+
+          echo "Plik końcowy:"
+          echo "$FINAL_PDF"
+
+      - name: Run Metryczka
+        shell: bash
+        env:
+          COMPETITIONS: ${{ inputs.competitions }}
+          DOPUSZCZENIE: ${{ inputs.dopuszczenie }}
+        run: |
+          set -e
+
+          . venv/bin/activate
+
+          echo "Konkurencje:"
+          echo "$COMPETITIONS"
+
+          ARGS=(
+            python metryczka.py
+            --no-gui
+            --in "$PDF_PATH"
+            --out "$RAW_PDF"
+            --competitions "$COMPETITIONS"
+          )
+
+          if [ "$DOPUSZCZENIE" = "true" ]; then
+            ARGS+=("-d")
+          fi
+
+          "${ARGS[@]}"
+
+      - name: Check generated PDF
+        shell: bash
+        run: |
+          set -e
+
+          if [ ! -f "$RAW_PDF" ]; then
+            echo "BŁĄD: program nie utworzył pliku wynikowego:"
+            echo "$RAW_PDF"
+            exit 1
+          fi
+
+          echo "Wygenerowano:"
+          ls -lh "$RAW_PDF"
+
+      - name: Downgrade PDF
+        shell: bash
+        run: |
+          set -e
+
+          gs \
+            -sDEVICE=pdfwrite \
+            -dCompatibilityLevel=1.4 \
+            -dPDFSETTINGS=/prepress \
+            -dNOPAUSE \
+            -dBATCH \
+            -sOutputFile="$FINAL_PDF" \
+            "$RAW_PDF"
+
+          echo "Gotowy PDF po downgrade:"
+          ls -lh "$FINAL_PDF"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metryczka-output
+          path: final/*
+          if-no-files-found: error
